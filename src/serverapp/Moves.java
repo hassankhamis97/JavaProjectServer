@@ -14,12 +14,12 @@ import java.time.LocalTime;
  */
 class Moves
 {
-    private String playerID;
+    private int playerID;
     private LocalTime currentTime;
     private long delayTimeSec;
     private String moveType;
     private String blockNo;
-    public Moves(String id,LocalTime current,String type,String number)
+    public Moves(int id,LocalTime current,String type,String number)
     {
         playerID = id;
         currentTime = current;
@@ -32,6 +32,14 @@ class Moves
         delayTimeSec = delay;
     }
     
+    public int getPalyerID()
+    {
+        return playerID; 
+    }
+    public long getdelayTimeSec()
+    {
+        return delayTimeSec; 
+    }
     public LocalTime getCurrentTime()
     {
         return currentTime;

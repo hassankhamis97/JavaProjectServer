@@ -53,7 +53,7 @@ public class ServerGameHandler {
     ResultSet rs;
     PreparedStatement ps;
     boolean isPlayer1Wait = false;
-    List<Moves> mvlst = new ArrayList<Moves>();
+    ArrayList<Moves> mvlst = new ArrayList<Moves>();
     Moves mv;
     Thread th1;
     Thread th2;
@@ -61,6 +61,10 @@ public class ServerGameHandler {
     PlayerStatus player1Ready = PlayerStatus.Ready;
     PlayerStatus player2Ready = PlayerStatus.Ready;
     boolean isFinish;
+    boolean enabledSavedPlayer1 = true;
+    boolean enabledSavedPlayer2 = false;
+    int player1ID;
+    int player2ID;
 
     public ServerGameHandler(Socket virtualSocketPlayer1, Socket virtualSocketPlayer2) {
         try {
@@ -73,6 +77,8 @@ public class ServerGameHandler {
 //                        p1.startGame();
 //                        p2.startGame();
 //                    }
+            player1ID = ServerApp.opList.stream().filter(f -> f.playerSocket == virtualSocketPlayer1).map(m -> m.playerID).findFirst().get();
+            player2ID = ServerApp.opList.stream().filter(f -> f.playerSocket == virtualSocketPlayer2).map(m -> m.playerID).findFirst().get();
             dis1 = new DataInputStream(virtualSocketPlayer1.getInputStream());
             dis2 = new DataInputStream(virtualSocketPlayer2.getInputStream());
             dos1 = new DataOutputStream(virtualSocketPlayer1.getOutputStream());
@@ -80,7 +86,7 @@ public class ServerGameHandler {
             dos1.writeUTF("startGame-tic");
             dos2.writeUTF("startGame-tic");
             isFinish = false;
-            mv = new Moves("0", LocalTime.now(), "-", "0");
+            mv = new Moves(0, LocalTime.now(), "-", "0");
             mvlst.add(mv);
             try {
                 Class.forName("com.mysql.jdbc.Driver");
@@ -101,48 +107,48 @@ public class ServerGameHandler {
                         String msgP1 = "closed";
                         try {
                             msgP1 = dis1.readUTF();
-                            
+
                         } catch (IOException ex) {
                             try {
-                                dos2.writeUTF("11-closed");
+                                if (!virtualSocketPlayer2.isClosed()) {
+                                    dos2.writeUTF("11-closed");
+                                }
                                 isFinish = true;
                                 virtualSocketPlayer1.close();
                             } catch (IOException ex1) {
                                 Logger.getLogger(ServerGameHandler.class.getName()).log(Level.SEVERE, null, ex1);
                             }
-                            
+
                         }
                         if (msgP1.equals("closed")) {
                             try {
-                                dos2.writeUTF("11-closed");
+                                if (!virtualSocketPlayer2.isClosed()) {
+                                    dos2.writeUTF("11-closed");
+                                }
                                 isFinish = true;
                                 virtualSocketPlayer1.close();
                             } catch (IOException ex) {
                                 Logger.getLogger(ServerGameHandler.class.getName()).log(Level.SEVERE, null, ex);
-                                
+
                             }
-                        }
-                        
-                        else
-                        {
+                        } else if (msgP1.equals("save")) {
+                            enabledSavedPlayer1 = true;
+                        } else {
                             String[] msgList = {};
                             msgList = msgP1.split("-");
 
-                            if(msgList[0].equals("msg"))
-                            {
+                            if (msgList[0].equals("msg")) {
                                 try {
                                     dos1.writeUTF("msg-own-" + msgList[1]);
                                     dos2.writeUTF("msg-notOwn-" + msgList[1]);
                                 } catch (IOException ex) {
                                     Logger.getLogger(ServerGameHandler.class.getName()).log(Level.SEVERE, null, ex);
                                 }
-                            }
-                            else
-                            {
+                            } else {
                                 if (player1Ready == PlayerStatus.Ready && player2Ready == PlayerStatus.Ready) {
 
                                     if (!msgList[0].equals("ready")) {
-                                        mv = new Moves(msgList[1], LocalTime.now(), "X", msgList[0]);
+                                        mv = new Moves(player1ID, LocalTime.now(), "X", msgList[0]);
                                         mvlst.add(mv);
                                         calculateDelayTime();
 
@@ -193,7 +199,7 @@ public class ServerGameHandler {
 
                                 }
                             }
-                            
+
                         }
                     }
                 }
@@ -210,7 +216,9 @@ public class ServerGameHandler {
                         } catch (IOException ex) {
                             try {
                                 isFinish = true;
-                                dos1.writeUTF("11-closed");
+                                if (!virtualSocketPlayer1.isClosed()) {
+                                    dos1.writeUTF("11-closed");
+                                }
                                 virtualSocketPlayer2.close();
                             } catch (IOException ex1) {
                                 Logger.getLogger(ServerGameHandler.class.getName()).log(Level.SEVERE, null, ex1);
@@ -218,19 +226,21 @@ public class ServerGameHandler {
                         }
                         if (msgP2.equals("closed")) {
                             try {
-                                dos1.writeUTF("11-closed");
+                                if (!virtualSocketPlayer1.isClosed()) {
+                                    dos1.writeUTF("11-closed");
+                                }
                                 isFinish = true;
                                 virtualSocketPlayer2.close();
                             } catch (IOException ex) {
                                 Logger.getLogger(ServerGameHandler.class.getName()).log(Level.SEVERE, null, ex);
                             }
+                        } else if (msgP2.equals("save")) {
+                            enabledSavedPlayer2 = true;
                         } else {
                             String[] msgList = {};
                             msgList = msgP2.split("-");
-                            
-                            
-                            if(msgList[0].equals("msg"))
-                            {
+
+                            if (msgList[0].equals("msg")) {
                                 try {
 //                                    dos1.writeUTF("msg-Player2-" + msgList[1]);
 //                                    dos2.writeUTF("msg-Player2-" + msgList[1]);
@@ -239,17 +249,14 @@ public class ServerGameHandler {
                                 } catch (IOException ex) {
                                     Logger.getLogger(ServerGameHandler.class.getName()).log(Level.SEVERE, null, ex);
                                 }
-                            }
-                            else{
+                            } else {
                                 if (player1Ready == PlayerStatus.Ready && player2Ready == PlayerStatus.Ready)//isPlayer1Wait
                                 {
-
-
 
                                     msgList = msgP2.split("-");
 
                                     if (!msgList[0].equals("ready")) {
-                                        mv = new Moves(msgList[1], LocalTime.now(), "O", msgList[0]);
+                                        mv = new Moves(player2ID, LocalTime.now(), "O", msgList[0]);
                                         mvlst.add(mv);
                                         calculateDelayTime();
                                     }
@@ -341,6 +348,13 @@ public class ServerGameHandler {
                     dos1.writeUTF("10-winner");
                     dos2.writeUTF("10-loser");
                     System.out.println("Player 1 win");
+                    GameResult gresult = new GameResult();
+                    gresult.player1ID = player1ID;
+                    gresult.player2ID = player2ID;
+                    gresult.WinnerID = player1ID;
+                    gresult.GameLevelID = 1;
+                    gresult.IsCompleted = 1;
+                    saveGameAndMoves(gresult, mvlst);
                 } else {
                     dos2.writeUTF("10-winner");
                     dos1.writeUTF("10-loser");
@@ -370,6 +384,7 @@ public class ServerGameHandler {
     private void endRoom(int playerNo) {
 
     }
+
     /*@Override
         public void run() {
                 while(true)
@@ -387,4 +402,25 @@ public class ServerGameHandler {
                 }
         }*/
 
+    private void saveGameAndMoves(GameResult gresult, ArrayList<Moves> mvlst1) {
+        Database db = new Database();
+        Connection con = db.openConnection();
+        if (enabledSavedPlayer1 == true && enabledSavedPlayer2 == true) {
+            gresult.WhoSaved = 3;
+            long gameID = db.saveGame(con, gresult);
+            db.saveGameMoves(con, mvlst1, gameID);
+        } else if (enabledSavedPlayer1 == true) {
+            gresult.WhoSaved = 1;
+            long gameID = db.saveGame(con, gresult);
+            db.saveGameMoves(con, mvlst1, gameID);
+        } else if (enabledSavedPlayer2 == true) {
+            gresult.WhoSaved = 2;
+            long gameID = db.saveGame(con, gresult);
+            db.saveGameMoves(con, mvlst1, gameID);
+        } else {
+            db.saveGame(con, gresult);
+        }
+        db.closeConnection(con);
+    }
+    
 }

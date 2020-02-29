@@ -41,6 +41,7 @@ public class OnlinePlayers {
         playerID = 0;
         status = "available";
         try {
+
             dis = new DataInputStream(playerSocket.getInputStream());
             dos = new DataOutputStream(playerSocket.getOutputStream());
 
@@ -51,29 +52,38 @@ public class OnlinePlayers {
             @Override
             public void run() {
                 while (!playerSocket.isClosed()) {
-                    if (playerID == 0) {
-                        try {
-
-                            //SharedData.client = new Socket("127.0.0.1",5000);
-                            //port = SharedData.client.getLocalPort();
-                            Connection con = DriverManager.getConnection("jdbc:mysql://127.0.0.1:3306/javaproject", "root", "root");
-                            PreparedStatement stmt = con.prepareStatement("select ID from player where portID = ?");
-                            stmt.setInt(1, port);
-                            ResultSet rs;
-                            rs = stmt.executeQuery();
-                            rs.next();
-                            playerID = rs.getInt("ID");
-                            con.close();
-                            System.out.println("player ID = done");
-                        } catch (SQLException ex) {
-                            System.out.println("NotFound Yet in DB I Will Try Again");
-                        }
-                    } else {
-                        try {
-                            if (status.equals("available")) {
-                                boolean isFound = false;
-                                String msg = dis.readUTF();
-                                String[] strArr = msg.split("-");
+//                    if (playerID == 0) {
+//                        try {
+//
+//                            //SharedData.client = new Socket("127.0.0.1",5000);
+//                            //port = SharedData.client.getLocalPort();
+//                            Connection con = DriverManager.getConnection("jdbc:mysql://127.0.0.1:3306/javaproject", "root", "root");
+//                            PreparedStatement stmt = con.prepareStatement("select ID from player where portID = ?");
+//                            stmt.setInt(1, port);
+//                            ResultSet rs;
+//                            rs = stmt.executeQuery();
+//                            rs.next();
+//                            playerID = rs.getInt("ID");
+//                            con.close();
+//                            System.out.println("player ID = done");
+//                        } catch (SQLException ex) {
+//                            System.out.println("NotFound Yet in DB I Will Try Again");
+//                        }
+//                    } else {
+                    try {
+                        if (status.equals("available")) {
+                            boolean isFound = false;
+                            String msg = dis.readUTF();
+                            String[] strArr = msg.split("-");
+                            if (strArr[1].equals("ID")) {
+                                playerID = Integer.parseInt(strArr[0]);
+                                Database db = new Database();
+                                Connection con = db.openConnection();
+                                db.registerPlayerOnline(con, playerID, 1);
+                                db.closeConnection(con);
+                                continue;
+                            }
+                            if (playerID > 0) {
                                 switch (strArr[1]) {
                                     case "random":
                                         for (int i = 0; i < ServerApp.gpList.size(); i++) {
@@ -99,8 +109,9 @@ public class OnlinePlayers {
                                         if (!isFound) {
                                             GamePlayers gp = new GamePlayers(playerSocket, 0, strArr[0]);
                                             ServerApp.gpList.add(gp);
-                                            if(gp.gameOption.equals("tic"))
+                                            if (gp.gameOption.equals("tic")) {
                                                 dos.writeUTF("PlayRandom-" + playerID);
+                                            }
                                             System.out.println("First");
 
                                         }
@@ -140,6 +151,10 @@ public class OnlinePlayers {
                                                 }
                                                 break;
                                             case "NO":
+                                                Database db = new Database();
+                                                Connection con = db.openConnection();
+                                                db.registerPlayerRequested(con, playerID, 0);
+                                                db.closeConnection(con);
                                                 dos.writeUTF("requestRefused");
                                                 break;
                                         }
@@ -151,23 +166,28 @@ public class OnlinePlayers {
                                         Socket s;
                                         try {
                                             int player2id = Integer.parseInt(strArr[1]);
-                                            Connection con = DriverManager.getConnection("jdbc:mysql://127.0.0.1:3306/javaproject", "root", "root");
-                                            PreparedStatement stmt = con.prepareStatement("select ID from player where portID = ?");
-                                            stmt.setInt(1, port);
-                                            ResultSet rs;
-                                            rs = stmt.executeQuery();
-                                            rs.next();
-                                            playerID = rs.getInt("ID");
-                                            con.close();
+//                                            Connection con = DriverManager.getConnection("jdbc:mysql://127.0.0.1:3306/javaproject", "root", "root");
+                                            Database db = new Database();
+                                            Connection con = db.openConnection();
+                                            playerID = db.getPlayerIDUsingPort(con, port);
+//                                            PreparedStatement stmt = con.prepareStatement("select ID from player where portID = ?");
+//                                            stmt.setInt(1, port);
+//                                            ResultSet rs;
+//                                            rs = stmt.executeQuery();
+//                                            rs.next();
+//                                            playerID = rs.getInt("ID");
+//                                            con.close();
+                                            db.registerPlayerRequested(con, playerID, 1);
+                                            db.closeConnection(con);
                                             s = ServerApp.opList.stream().filter(f -> f.playerID == player2id).map(m -> m.playerSocket).findFirst().get();
                                             DataOutputStream dos2 = new DataOutputStream(s.getOutputStream());
 //                                            DataInputStream dis2 = new DataInputStream(s.getInputStream());
 //                                            ObjectOutputStream socketObj =  new ObjectOutputStream(playerSocket.getOutputStream());
                                             dos2.writeUTF("Playwith-" + playerID);
                                             dos.writeUTF("Playwith-" + playerID);
+
 //                                            socketObj.writeObject(playerSocket);
                                             //String friendMsg = dis2.readUTF();
-
                                         } catch (Exception e) {
                                             System.out.println("player closed from one minute ago");
                                             dos.writeUTF("player closed from one minute ago");
@@ -175,6 +195,7 @@ public class OnlinePlayers {
                                         status = "pending";
                                         break;
                                 }
+                            }
 //                                for (int i = 0; i < ServerApp.opList.size(); i++) {
 //                                    if (Integer.parseInt(msg) == ServerApp.opList.get(i).playerID) {
 //                                        DataOutputStream dos2 = new DataOutputStream(ServerApp.opList.get(i).playerSocket.getOutputStream());
@@ -202,22 +223,25 @@ public class OnlinePlayers {
 //                                    }
 //                                }
 //                                break;
-                            }
-                        } catch (IOException ex) {
-                            try {
-                                playerSocket.close();
-
-                                OnlinePlayers opObj = ServerApp.opList.stream().filter(f -> f.playerID == playerID).findFirst().get();
-                                ServerApp.opList.remove(opObj);
-                                System.out.println("player " + playerID + " Closed");
-//                                updateCloseInDB();
-                            } catch (IOException ex1) {
-                                Logger.getLogger(OnlinePlayers.class.getName()).log(Level.SEVERE, null, ex1);
-                            }
                         }
+                    } catch (IOException ex) {
+                        try {
+                            Database db = new Database();
+                            Connection con = db.openConnection();
+                            db.registerPlayerOnline(con, playerID, 0);
+                            db.closeConnection(con);
+                            playerSocket.close();
 
+                            OnlinePlayers opObj = ServerApp.opList.stream().filter(f -> f.playerID == playerID).findFirst().get();
+                            ServerApp.opList.remove(opObj);
+                            System.out.println("player " + playerID + " Closed");
+//                                updateCloseInDB();
+                        } catch (IOException ex1) {
+                            Logger.getLogger(OnlinePlayers.class.getName()).log(Level.SEVERE, null, ex1);
+                        }
                     }
 
+//                    }
                 }
             }
         });
